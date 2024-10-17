@@ -1,0 +1,4 @@
+from .bnn_learnable_priors_and_activations import *
+
+from .bnn_regression_pyro import SingleHiddenLayerWide1DRegressionNNWithGaussianPriors
+from .bnn_classification_pyro import SingleHiddenLayerWide1DClassificationNNWithGaussianPriors
