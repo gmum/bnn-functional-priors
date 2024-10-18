@@ -194,6 +194,12 @@ def import_parameters(encoded_parameters, target_net_width=None, framework="pyro
     Args:
         net_width (int): network target (desired) width
     """
+    if "prior" not in encoded_parameters:
+        logging.warning(
+            "[import_parameters] Failed to parse encoded_parameters. Perhaps already parsed?"
+        )
+        return encoded_parameters
+
     encoded_prior = encoded_parameters["prior"]
 
     target_net_width = target_net_width or encoded_prior["net_width"]
