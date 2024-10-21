@@ -17,8 +17,8 @@ To setup environment execute `bash prepare_environment.sh`
 ## Acknowledgements and Licence
 This research is part of the project No. 2022/45/P/ST6/02969 co-funded by the National Science Centre and the European Union Framework Programme for Research and Innovation Horizon 2020 under the Marie Skłodowska-Curie grant agreement No. 945339. For the purpose of Open Access, the author has applied a CC-BY public copyright licence to any Author Accepted Manuscript (AAM) version arising from this submission. 
 <p align="center">
-  <img src="fig/eu_flag.jpg" width="350" />
-  <img src="fig/ccby_licence.png" width="350" />
+  <img src="fig/eu_flag.jpg" width="50" />
+  <img src="fig/ccby_licence.png" width="90" />
 </p>
 
 This research was in part funded by National Science Centre, Poland, 2022/45/N/ST6/03374.
