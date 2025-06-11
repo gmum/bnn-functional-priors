@@ -1,4 +1,5 @@
 """ Extract characteristics from functions. """
+
 import torch
 
 
@@ -121,3 +122,21 @@ def compare_characteristics(y_batch1, y_batch2):
         m2, s2 = c2[k]
         summaries.append(f"{k} = {m1:.2f}+/-{s1:.2f} vs {m2:.2f}+/-{s2:.2f}")
     return c1, c2, ",  ".join(summaries)
+
+
+def compute_distributional_stats(batch_learned, batch_target):
+
+    (
+        characteristics_target,
+        characteristics_learning,
+        comparison_str,
+    ) = compare_characteristics(batch_target, batch_learned)
+
+    stats = {}
+    for k, (m, s) in characteristics_learning.items():
+        stats["learning_" + k + "_mean"] = m.item()
+        stats["learning_" + k + "_std"] = s.item()
+    for k, (m, s) in characteristics_target.items():
+        stats["target_" + k + "_mean"] = m.item()
+        stats["target_" + k + "_std"] = s.item()
+    return comparison_str, stats

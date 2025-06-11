@@ -10,6 +10,68 @@ import ot as pot
 min_var_est = 1e-8
 
 
+def wasserstein_distance_raw(batch_learning, batch_target):
+    """
+    Calulates the two components of the 2-Wasserstein metric:
+    The general formula is given by: d(P_X, P_Y) = min_{X, Y} E[|X-Y|^2]
+    For multivariate gaussian distributed inputs z_X ~ MN(mu_X, cov_X) and z_Y ~ MN(mu_Y, cov_Y),
+    this reduces to: d = |mu_X - mu_Y|^2 - Tr(cov_X + cov_Y - 2(cov_X * cov_Y)^(1/2))
+    Fast method implemented according to following paper: https://arxiv.org/pdf/2009.14075.pdf
+    Input shape: [b, n] (e.g. batch_size x num_features)
+    Output shape: scalar
+
+    first implementation from https://gist.github.com/Flunzmas/6e359b118b0730ab403753dcc2a447df
+    """
+    X = batch_target
+    Y = batch_learning
+
+    if X.shape != Y.shape:
+        raise ValueError("Expecting equal shapes for X and Y!")
+
+    # the linear algebra ops will need some extra precision -> convert to double
+    X, Y = X.transpose(0, 1).double(), Y.transpose(0, 1).double()  # [n, b]
+    mu_X, mu_Y = torch.mean(X, dim=1, keepdim=True), torch.mean(
+        Y, dim=1, keepdim=True
+    )  # [n, 1]
+    n, b = X.shape
+    fact = 1.0 if b < 2 else 1.0 / (b - 1)
+
+    # Cov. Matrix
+    E_X = X - mu_X
+    E_Y = Y - mu_Y
+    cov_X = torch.matmul(E_X, E_X.t()) * fact  # [n, n]
+    cov_Y = torch.matmul(E_Y, E_Y.t()) * fact
+
+    # calculate Tr((cov_X * cov_Y)^(1/2)). with the method proposed in https://arxiv.org/pdf/2009.14075.pdf
+    # The eigenvalues for M are real-valued.
+    C_X = E_X * math.sqrt(fact)  # [n, n], "root" of covariance
+    C_Y = E_Y * math.sqrt(fact)
+    M_l = torch.matmul(C_X.t(), C_Y)
+    M_r = torch.matmul(C_Y.t(), C_X)
+    M = torch.matmul(M_l, M_r)
+    S = (
+        torch.linalg.eigvals(M) + 1e-15
+    )  # add small constant to avoid infinite gradients from sqrt(0)
+    sq_tr_cov = S.sqrt().abs().sum()
+
+    # plug the sqrt_trace_component into Tr(cov_X + cov_Y - 2(cov_X * cov_Y)^(1/2))
+    trace_term = torch.trace(cov_X + cov_Y) - 2.0 * sq_tr_cov  # scalar
+
+    # |mu_X - mu_Y|^2
+    diff = mu_X - mu_Y  # [n, 1]
+    mean_term = torch.sum(torch.mul(diff, diff))  # scalar
+
+    # put it together
+    return (trace_term + mean_term).float()
+
+
+def wasserstein_distance_raw_avg(batch_learning, batch_target):
+    n_func_samples = batch_target.shape[
+        -1
+    ]  # the raw value grows proportionally to number of sampling pts
+    return wasserstein_distance_raw(batch_learning, batch_target) / n_func_samples
+
+
 def wasserstein(
         x0: torch.Tensor,
         x1: torch.Tensor,
@@ -33,6 +95,7 @@ def wasserstein(
         x0 = x0.reshape(x0.shape[0], -1)
     if x1.dim() > 2:
         x1 = x1.reshape(x1.shape[0], -1)
+    x1 = x1.to(x0.device, x0.dtype)
     M = torch.cdist(x0, x1)
     if power == 2:
         M = M ** 2
@@ -247,6 +310,8 @@ def compute_distribution_distances(pred: torch.Tensor, true: Union[torch.Tensor,
     assert pred.shape == true.shape, "Predictions and ground truth must have the same dimensions!"
     
     NAMES = [
+        "Wasserstein_RAW",
+        "Wasserstein_RAW_AVG",
         "1-Wasserstein",
         "2-Wasserstein",
         "Linear_MMD",
@@ -270,6 +335,8 @@ def compute_distribution_distances(pred: torch.Tensor, true: Union[torch.Tensor,
     a = pred
     b = true
 
+    w_raw = wasserstein_distance_raw(b, a)  # note order of arguments!
+    w_raw_avg = wasserstein_distance_raw_avg(b, a)  # note order of arguments!
     w1 = wasserstein(a, b, power=1)
     w2 = wasserstein(a, b, power=2)
     mmd_linear = linear_mmd2(a, b).item()
@@ -281,7 +348,7 @@ def compute_distribution_distances(pred: torch.Tensor, true: Union[torch.Tensor,
     )
 
     dists.append(
-        (w1, w2, mmd_linear, mmd_poly, mmd_rbf, *mean_dists, *median_dists)
+        (w_raw, w_raw_avg, w1, w2, mmd_linear, mmd_poly, mmd_rbf, *mean_dists, *median_dists)
     )
 
     to_return.extend(np.array(dists).mean(axis=0))

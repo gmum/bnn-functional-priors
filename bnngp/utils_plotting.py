@@ -21,11 +21,11 @@ def _create_fig(x_dim):
 
     # Prepare canvas
     if n_cols == 1:
-        fig = plt.figure(figsize=(12.8, 3.2))
+        fig = plt.figure(figsize=(4.0, 1.5))
         axes = [plt.gca()]
     else:
         # Create a figure and a set of subplots
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_rows * 12.8, n_cols * 3.2))
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_rows * 4.0, n_cols * 1.5))
         # Flatten the axes array for easy iteration, handle case where n < n_cols * n_rows
         axes = axes.flatten()
     return fig, axes
@@ -75,6 +75,7 @@ def plot_network_functions_1D_slices(
     title=None,
     x_dim=None,  # select which dimension should be plotted, if None plots all of them
     slices_width=0.5,  # in all dimensions apart from the currently plotted we need to slice data
+    **kwargs,
 ):
     """
     Plot the output of a neural network over specific dimensions of the input.
@@ -104,11 +105,12 @@ def plot_network_functions_1D_slices(
             x = x0[mask, d]
             x, y = zip(*sorted(zip(x, y)))
             x, y = np.array(x), np.array(y)
-            plt.plot(x, y)
+            plt.plot(x, y, **kwargs)
 
-        plt.xlabel(f"x dim={d}" if input_grid_x.shape[-1] > 1 else "x")
-        plt.ylabel(f"f(x)")
-    fig.suptitle(title or f"Distribution of functions f(x)~{network}")
+        # plt.xlabel(f"x dim={d}" if input_grid_x.shape[-1] > 1 else "x")
+        # plt.ylabel(f"f(x)")
+    if title:
+        fig.suptitle(title)
 
 
 def _extract_data_slice_mask(x, d, slices_width):
@@ -151,10 +153,10 @@ def _extract_data_slice_mask(x, d, slices_width):
             break
         slice_width *= 2.0
 
-    # if slice_width > slices_width:
-    #     logging.warning(
-    #         f"[utils_plotting] Slicing window width for dim={d} increased from {slices_width} to {slice_width} to capture {np.sum(mask)} pts."
-    #     )
+    if slice_width > slices_width:
+        logging.warning(
+            f"[utils_plotting] Slicing window width for dim={d} increased from {slices_width} to {slice_width} to capture {np.sum(mask)} pts."
+        )
 
     return mask
 

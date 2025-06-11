@@ -1,3 +1,4 @@
+""" This module provides functionality to create fixed Gaussian priors for a single-hidden layer neural network. """
 from .shared_gaussian_priors import create_factorized_shared_gaussian_sampler
 from .constraints import invert_positive
 
@@ -25,7 +26,9 @@ def create_gaussian_priors(
     separator: str = ".",
     **samplers_kwargs,
 ):
-    logging.info(f"Creating Gaussian priors with init={init} create={create}")
+    logging.info(
+        f"[create_gaussian_priors] Creating Gaussian priors with init={init} create={create}"
+    )
 
     n2p = {n: p for n, p in net.named_parameters()}
     if sorted(n2p.keys()) != sorted(
@@ -64,6 +67,20 @@ def create_gaussian_priors(
 
     assert n2p["fc1.bias"].shape[-1] == n2p["fc2.weight"].shape[-1]
     net_width = n2p["fc1.bias"].shape[-1]
+
+    logging.info(
+        f"[create_gaussian_priors] Creating Gaussian priors with fc2.weight.std = {init['wv']} / np.sqrt({net_width})"
+    )
+
+    # Save values so they can be exported into a json file (at the end of training script)
+    aux["fc1.weight.loc"] = torch.tensor(init["mu"], requires_grad=False)
+    aux["fc1.weight.scale"] = torch.tensor(init["su"], requires_grad=False)
+    aux["fc1.bias.loc"] = torch.tensor(init["ma"], requires_grad=False)
+    aux["fc1.bias.scale"] = torch.tensor(init["sa"], requires_grad=False)
+    aux["fc2.weight.loc"] = torch.tensor(init["mv"], requires_grad=False)
+    aux["fc2.weight.scale"] = torch.tensor(init["wv"] / np.sqrt(net_width), requires_grad=False)
+    aux["fc2.bias.loc"] = torch.tensor(init["mb"], requires_grad=False)
+    aux["fc2.bias.scale"] = torch.tensor(init["sb"], requires_grad=False)
 
     _create_for_parameter("fc1.weight", init["mu"], init["su"])
     _create_for_parameter("fc1.bias", init["ma"], init["sa"])

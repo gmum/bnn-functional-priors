@@ -9,6 +9,7 @@ import numpy as np
 from collections.abc import Iterable
 
 import logging
+import gzip
 
 
 import pickle
@@ -52,7 +53,7 @@ def pack_resursively(obj):
             return json.dumps(obj)
 
         except Exception as e:
-            logging.debug(
+            logging.info(
                 f"[import_export] Failed to dump {obj} to JSON ({e}). Pickling instead."
             )
 
@@ -70,7 +71,10 @@ def unpack_recursively(dct):
     for k, v in dct.items():
         if isinstance(v, dict):
             if v.get("type") == "pickle":
-                dct_unpacked[k] = unpickle_object(v)
+                try:
+                    dct_unpacked[k] = unpickle_object(v)
+                except Exception as e:
+                    logging.warning(f"Failed loading {k} = {v}: {e}")
             else:
                 dct_unpacked[k] = unpack_recursively(v)
 
@@ -78,6 +82,18 @@ def unpack_recursively(dct):
             dct_unpacked[k] = v
 
     return dct_unpacked
+
+
+def _encode_torch_module(model):
+    # Save the model to a byte buffer
+    buffer = io.BytesIO()
+    torch.save(model.state_dict(), buffer)
+
+    # Encode the buffer's contents as a base64 string
+    buffer.seek(0)  # Move to the start of the buffer
+    model_string = base64.b64encode(buffer.read()).decode("utf-8")
+
+    return model_string
 
 
 def encode_gaussian_priors(parameters):
@@ -145,10 +161,13 @@ def encode_activation(activation):
 
 
 def decode_activation(activation):
-    if activation["type"] == "gp_activations":
+    activation_type = activation["type"]
+    logging.debug(f"[decode_activation] loading type={activation_type} activation={activation}")
+    
+    if activation_type == "gp_activations":
         return activations.get_activation(activation)
 
-    elif activation["type"] == "pickle":
+    elif activation_type == "pickle":
         activation_obj = unpickle_from_str(activation["pickle"])
 
         # Bugfix for NNActivation: pyro fails when object attributes are lists
@@ -252,6 +271,7 @@ def save_to_json(
 ):
     """Save prior parameters to json file."""
     # results_str = str(results).replace("\n", "  ")
+    results = results.copy()
     logging.info(f"[import_export] Writing to {json_filename}")
 
     net_width = _extract_value(results, "net_width", net_width)
@@ -266,20 +286,30 @@ def save_to_json(
         activation=activation,
     )
 
+    results = save_data_to_json(json_filename, results, pickle_objects)
+
+    return results
+
+def save_data_to_json(json_filename, results, pickle_objects=True):
+    results = results.copy()
+    
     if pickle_objects:
         results = pack_resursively(results)
 
     with open(json_filename, "w") as f:
         json.dump(results, f, default=str)
-
     return results
 
 
 def load_from_json(
     json_filename, target_net_width=None, parse_pickles=True, framework="pyro"
 ):
-    with open(json_filename, "r") as f:
-        results = json.load(f)
+    if json_filename.endswith(".gz"):
+        with gzip.open(json_filename, "rt") as f:
+            results = json.load(f)
+    else:
+        with open(json_filename, "r") as f:
+            results = json.load(f)
 
     target_net_width = _extract_value(results, "net_width", target_net_width)
 

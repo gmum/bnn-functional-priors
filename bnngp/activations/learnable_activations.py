@@ -160,3 +160,69 @@ class FourierNN(PeriodicNN):
         **kwargs,
     ):
         return super().__init__(*args, n_nodes=hidden_size, **kwargs)
+
+
+class NN2Fourier(nn.Module):
+    def get_conditional_params_shapes(self):
+        return []
+
+    def __init__(
+        self, indim=1, output_size=1, hidden_layers=0, width=5, n_nodes=10, activation=nn.SiLU()
+    ):
+        super().__init__()
+        self.width = width or n_nodes//2
+        self.activation = activation
+
+        self.fci = nn.Linear(indim, width)
+        self.fc = torch.nn.Sequential(
+            *[nn.Linear(width, width) for _ in range(hidden_layers)]
+        )
+        self.fco = nn.Linear(width, n_nodes)
+        _disable_weight(self.fco)
+        _disable_bias(self.fco)
+
+        # Define the frequencies for the Fourier basis activations
+        self.n_nodes = n_nodes                
+        frequencies = torch.arange(1, n_nodes + 1).float()
+        self.frequencies = torch.nn.Parameter(frequencies)
+        
+        # Linear transformation from hidden layer to output
+        self.fc2 = nn.Linear(n_nodes, output_size)
+        _disable_bias(self.fc2)        
+        
+    def forward(self, a, conditional_params=None):
+        a = a.unsqueeze(-1)
+
+        a = self.fci(a)
+        a = self.activation(a)
+
+        for fc in self.fc:
+            a = fc(a)
+            a = self.activation(a)
+
+        a = self.fco(a)
+        
+        #######################################################################
+        
+        # Apply Fourier-based activations with increasing frequencies
+        activations = []
+        for i in range(self.n_nodes):
+            if i % 2 == 0:
+                # Apply sine activation for even-indexed neurons
+                activations.append(
+                    torch.sin(2 * math.pi * self.frequencies[i] * a[..., i])
+                )
+            else:
+                # Apply cosine activation for odd-indexed neurons
+                activations.append(
+                    torch.cos(2 * math.pi * self.frequencies[i] * a[..., i])
+                )
+
+        # Stack activations back into a tensor
+        a = torch.stack(activations, dim=-1)
+
+        # Pass through the output layer
+        a = self.fc2(a)        
+
+        a = a.squeeze(-1)
+        return a

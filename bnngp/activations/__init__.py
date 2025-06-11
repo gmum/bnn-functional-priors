@@ -8,7 +8,12 @@ from .learnable_conditioned_nn_activations import (
 )
 
 try:
-    from .learnable_activations import ActivationsCombination, NNActivation, PeriodicNN
+    from .learnable_activations import (
+        ActivationsCombination,
+        NNActivation,
+        PeriodicNN,
+        NN2Fourier,
+    )
 except Exception as e:
     print(f"ERROR: Failed to import from learnable_activations: {e}")
 
@@ -267,7 +272,7 @@ def _get_learnable_activation(name, **kwargs):
             n_nodes=n_nodes, train_freqs=True, train_in=True, train_out=True
         )
 
-    elif name == "fourier2":  # the best performing variant
+    elif name == "fourier2":  # the best performing periodic variant
         n_nodes = kwargs.get("n_nodes", 10)
         logging.info(
             f"[get_learnable_activation] activation=PeriodicNN(n_nodes={n_nodes}, train_freqs=True)"
@@ -275,6 +280,18 @@ def _get_learnable_activation(name, **kwargs):
         return PeriodicNN(
             n_nodes=n_nodes, train_freqs=True, train_in=False, train_out="weight"
         )
+
+    elif name == "nn2fourier":
+        logging.info(f"[get_learnable_activation] activation=NN2Fourier()")
+        return NN2Fourier()
+    
+    elif name == "nn2fourier2":
+        logging.info(f"[get_learnable_activation] activation=NN2Fourier()")
+        return NN2Fourier(hidden_layers=2, width=10, n_nodes=10, activation=nn.SiLU())
+    
+    elif name == "nn2fourier3":
+        logging.info(f"[get_learnable_activation] activation=NN2Fourier()")
+        return NN2Fourier(hidden_layers=3, width=10, n_nodes=20, activation=nn.SiLU())        
 
     elif name == "nn":
         hidden_layers = kwargs.get("hidden_layers", 1)

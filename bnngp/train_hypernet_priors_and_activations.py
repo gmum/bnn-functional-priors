@@ -122,26 +122,26 @@ def report(
         f"[it={iteration}] loss={loss: .3f} wasserstein={loss_wd:.3f}  [target vs learning]: {comparison_str}"
     )
 
-    # Plot target samples
-    plotting_grid_x = train_grid_x
-    utils.plot_functions_1D_slices(
-        plotting_grid_x,
-        batch_target,
-        title=f"Target functions from generator",
-    )
-    plt.savefig(f"{run_name}_iter={iteration}_target.png")
-    plt.clf()
-    # plt.show()
+    # # Plot target samples
+    # plotting_grid_x = train_grid_x
+    # utils.plot_functions_1D_slices(
+    #     plotting_grid_x,
+    #     batch_target,
+    #     title=f"Target functions from generator",
+    # )
+    # plt.savefig(f"{run_name}_iter={iteration}_target.png")
+    # plt.clf()
+    # # plt.show()
 
-    # Plot network samples
-    utils.plot_functions_1D_slices(
-        plotting_grid_x,
-        batch_learning,
-        title=f"Result from BNN after {iteration} iterations",
-    )
-    plt.savefig(f"{run_name}_iter={iteration}_results.png")
-    plt.clf()
-    # plt.show()
+    # # Plot network samples
+    # utils.plot_functions_1D_slices(
+    #     plotting_grid_x,
+    #     batch_learning,
+    #     title=f"Result from BNN after {iteration} iterations",
+    # )
+    # plt.savefig(f"{run_name}_iter={iteration}_results.png")
+    # plt.clf()
+    # # plt.show()
 
     summary_stats = {
         "wasserstein_distance": loss_wd.item(),
@@ -160,6 +160,107 @@ def report(
         logging.info(f"[{time.time()-start_time:.1f}s] {iteration_results}")
 
     return summary_stats
+
+
+def run_main(
+    create_training_grid,
+    create_target_generator,
+    target_hyperparams_generator,
+    hypernet_input_builder,
+    condition_dimensionality,
+    evaluation=None,
+    run_name="",
+    bnn_width=1_000,
+    loss_func="wasserstein_distance",
+    batch_size=256,
+    num_function_samples=256,
+    shuffle_xs_n_times=1,
+    freeze_training_grid=False,
+    final_evaluation_input_grid=None,
+    final_evaluation_batch_size=1024,
+    n_iterations=1000,
+    lr=0.01,
+    report_every_n_iterations=200,
+    activation="conditionalnn",
+    hypernet_arch_no=0,
+    zero_locations=True,  # for priors: do we want to learn locations or only stds
+    random_seed=None,
+    description={},  # additional info to be stored along with data and results in json files
+):
+    start_time = time.time()
+    utils.set_random_seed(random_seed)
+
+    loss_func = getattr(losses, loss_func)
+    freeze_training_grid = bool(freeze_training_grid)
+
+    logging.info(f"Configuration: {locals()}")
+    config = locals().copy()
+    utils.save_configuration(f"{run_name}_configuration.json", config)
+
+    input_n_dims = create_training_grid(1).shape[-1]
+    net = SingleHiddenLayerWideNNWithLearnablePriorsAndActivation(
+        width=bnn_width, indim=input_n_dims
+    )
+    print(f"net = {net}")
+
+    activation = activations.get_activation(name=activation)
+    activation.to(utils.get_device_name())
+    print(
+        f"activation = {activation} conditional_params_shapes = {activation.get_conditional_params_shapes()}"
+    )
+
+    logging.info(
+        "Conditioning settings: "
+        f"create_target_generator={create_target_generator} "
+        f"target_hyperparams_generator={target_hyperparams_generator} "
+        f"evaluation={evaluation}"
+    )
+
+    # Hypernet output = activation parameters + priors' parameters
+    net_n_parameters = len(list(net.named_parameters()))
+    target_param_shapes = activation.get_conditional_params_shapes() + [
+        (net_n_parameters * 2,)
+    ]
+    hypernet = create_conditioning_hypernet(
+        indim=condition_dimensionality,
+        target_param_shapes=target_param_shapes,
+        arch_no=hypernet_arch_no,
+    )
+    print(f"hypernet = {hypernet}")
+
+    initial_performance = None
+    if evaluation:
+        print("Performing evaluation before training")
+        initial_performance = evaluation(**locals())
+
+    history = train(**locals())
+
+    history = pd.DataFrame(history)
+    print(f"training history:\n{history}")
+    history.to_csv(run_name + "_history.csv", index=False)
+
+    # Save evaluation and learned parameters to a file
+    results = {
+        "prior_type": "hypernet",
+        "priors_parameters": hypernet,
+        "net_width": bnn_width,
+        "activation": activation,
+        ##########################################
+        "hypernet_input_builder": hypernet_input_builder,
+        "condition_dimensionality": condition_dimensionality,
+        "target_hyperparams_generator": target_hyperparams_generator,
+        "create_target_generator": create_target_generator,
+        "evaluation_func": evaluation,
+        ##########################################
+        "initial_performance": initial_performance,
+        "evaluation": evaluation(**locals()) if evaluation else None,
+        "net": net,
+        "history": json.loads((history.to_json(orient="records"))),
+        "config": config,
+        "script": sys.argv[0],
+        "time": time.time() - start_time,
+    }
+    return results
 
 
 def main_parameterized(
@@ -193,27 +294,6 @@ def main_parameterized(
     if os.path.isfile(results_path):
         logging.info(f"Computation results ({results_path}) already exist! Exiting.")
         return import_export.load_from_json(results_path)
-
-    start_time = time.time()
-    utils.set_random_seed(random_seed)
-
-    loss_func = getattr(losses, loss_func)
-    freeze_training_grid = bool(freeze_training_grid)
-
-    logging.info(f"Configuration: {locals()}")
-    config = locals().copy()
-    utils.save_configuration(f"{run_name}_configuration.json", config)
-
-    net = SingleHiddenLayerWideNNWithLearnablePriorsAndActivation(
-        width=bnn_width, indim=input_n_dims
-    )
-    print(f"net = {net}")
-
-    activation = activations.get_activation(name=activation)
-    activation.to(utils.get_device_name())
-    print(
-        f"activation = {activation} conditional_params_shapes = {activation.get_conditional_params_shapes()}"
-    )
 
     # Conditioning target (generator with varying hyperparameters)
     if conditioning == "lengthscale":
@@ -504,24 +584,7 @@ def main_parameterized(
         #######################################################################
         raise ValueError(f"Unsupported conditioning={conditioning}!")
 
-    logging.info(
-        "Conditioning settings: "
-        f"create_target_generator={create_target_generator} "
-        f"target_hyperparams_generator={target_hyperparams_generator} "
-        f"evaluation={evaluation}"
-    )
-
-    # Hypernet output = activation parameters + priors' parameters
-    net_n_parameters = len(list(net.named_parameters()))
-    target_param_shapes = activation.get_conditional_params_shapes() + [
-        (net_n_parameters * 2,)
-    ]
-    hypernet = create_conditioning_hypernet(
-        indim=condition_dimensionality,
-        target_param_shapes=target_param_shapes,
-        arch_no=hypernet_arch_no,
-    )
-    print(f"hypernet = {hypernet}")
+    ###########################################################################
 
     # Fixed input grid for the final evaluation
     final_evaluation_input_grid = grids.create_uniform_grid(
@@ -531,7 +594,10 @@ def main_parameterized(
         n_dims=input_n_dims,
     )
     if final_evaluation_on_training_grid:
-        if final_evaluation_num_function_samples != num_function_samples:
+        if (
+            final_evaluation_num_function_samples
+            != num_function_samples * shuffle_xs_n_times
+        ):
             raise ValueError(
                 "Requested grid evaluation=training, but number of nodes is different!"
             )
@@ -539,36 +605,35 @@ def main_parameterized(
             final_evaluation_num_function_samples
         )
 
-    if evaluation:
-        print("Performing evaluation before training")
-        evaluation(**locals())
+    ###########################################################################
 
-    history = train(**locals())
+    results = run_main(
+        create_training_grid=create_training_grid,
+        create_target_generator=create_target_generator,
+        target_hyperparams_generator=target_hyperparams_generator,
+        hypernet_input_builder=hypernet_input_builder,
+        condition_dimensionality=condition_dimensionality,
+        final_evaluation_input_grid=final_evaluation_input_grid,
+        evaluation=evaluation,
+        ########################################################
+        run_name=run_name,
+        bnn_width=bnn_width,
+        loss_func=loss_func,
+        batch_size=batch_size,
+        num_function_samples=num_function_samples,
+        shuffle_xs_n_times=shuffle_xs_n_times,
+        freeze_training_grid=freeze_training_grid,
+        final_evaluation_batch_size=final_evaluation_batch_size,
+        n_iterations=n_iterations,
+        lr=lr,
+        report_every_n_iterations=report_every_n_iterations,
+        activation=activation,
+        hypernet_arch_no=hypernet_arch_no,
+        zero_locations=zero_locations,
+        random_seed=random_seed,
+        description=description,
+    )
 
-    history = pd.DataFrame(history)
-    print(f"training history:\n{history}")
-    history.to_csv(run_name + "_history.csv", index=False)
-
-    # Save evaluation and learned parameters to a file
-    results = {
-        "prior_type": "hypernet",
-        "priors_parameters": hypernet,
-        "net_width": bnn_width,
-        "activation": activation,
-        ##########################################
-        "hypernet_input_builder": hypernet_input_builder,
-        "condition_dimensionality": condition_dimensionality,
-        "target_hyperparams_generator": target_hyperparams_generator,
-        "create_target_generator": create_target_generator,
-        "evaluation_func": evaluation,
-        ##########################################
-        "evaluation": evaluation(**locals()) if evaluation else None,
-        "net": net,
-        "history": json.loads((history.to_json(orient="records"))),
-        "config": config,
-        "script": sys.argv[0],
-        "time": time.time() - start_time,
-    }
     import_export.save_to_json(results_path, results)
     return results
 
@@ -585,9 +650,11 @@ def main():
     print(
         "Training Bayesian Neural Network (BNN) to match GP prior. "
         "Priors and activations are amortized by hypernetworks. "
+        "Setting 1: conditioning == lengthscale: "
         " Target=GPs with Matern kernel with varying hyperparameters (e.g. lengthscales). "
         " This script utilizes a hypernetwork conditioned on the hyperparameters "
         " to dynamically set both the priors and activation functions. "
+        "Setting 2: conditioning == input "
     )
 
     parsed_args = args.parse_args()
