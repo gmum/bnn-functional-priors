@@ -1,7 +1,7 @@
 # High-Fidelity Transfer of Functional Priors for Wide Bayesian Neural Networks by Learning Activations
 
 ## Introduction
-This repository contains code accompanying the paper [Revisiting the Equivalence of Bayesian Neural Networks and Gaussian Processes: On the Importance of Learning Activations](https://arxiv.org/abs/2410.15777). 
+This repository contains code accompanying the paper [Revisiting the Equivalence of Bayesian Neural Networks and Gaussian Processes: On the Importance of Learning Activations](https://arxiv.org/abs/2410.15777). Please see [the project website](https://bayes.ii.uj.edu.pl/).
 
 ## Abstract
 Gaussian Processes (GPs) provide a convenient framework for specifying function-space priors, making them a natural choice for modeling uncertainty. In contrast, Bayesian Neural Networks (BNNs) offer greater scalability and extendability but lack the advantageous properties of GPs. This motivates the development of BNNs capable of replicating GP-like behavior. However, existing solutions are either limited to specific GP kernels or rely on heuristics.
