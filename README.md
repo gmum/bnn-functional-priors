@@ -1,10 +1,12 @@
 # High-Fidelity Transfer of Functional Priors for Wide Bayesian Neural Networks by Learning Activations
 
 ## Introduction
-This repository contains code accompanying the submission `High-Fidelity Transfer of Functional Priors for Wide Bayesian Neural Networks by Learning Activations`. 
+This repository contains code accompanying the paper [Revisiting the Equivalence of Bayesian Neural Networks and Gaussian Processes: On the Importance of Learning Activations](https://arxiv.org/abs/2410.15777). 
 
 ## Abstract
-Function-space priors in Bayesian Neural Networks provide a more intuitive approach to embedding beliefs directly into the model’s output, thereby enhancing regularization, uncertainty quantification, and risk-aware decision-making. However, imposing function-space priors on BNNs is challenging. We address this task through optimization techniques that explore how trainable activations can accommodate complex priors and match intricate target function distributions. We discuss critical learning challenges, including identifiability, loss construction, and symmetries that arise in this context. Furthermore, we enable evidence maximization to facilitate model selection by conditioning the functional priors on additional hyperparameters. Our empirical findings demonstrate that even BNNs with a single wide hidden layer, when equipped with these adaptive trainable activations and conditioning strategies, can effectively achieve high-fidelity function-space priors, providing a robust and flexible framework for enhancing Bayesian neural network performance.
+Gaussian Processes (GPs) provide a convenient framework for specifying function-space priors, making them a natural choice for modeling uncertainty. In contrast, Bayesian Neural Networks (BNNs) offer greater scalability and extendability but lack the advantageous properties of GPs. This motivates the development of BNNs capable of replicating GP-like behavior. However, existing solutions are either limited to specific GP kernels or rely on heuristics.
+We demonstrate that trainable activations are crucial for effective mapping of GP priors to wide BNNs. Specifically, we leverage the closed-form 2-Wasserstein distance for efficient gradient-based optimization of reparameterized priors and activations. Beyond learned activations, we also introduce trainable periodic activations that ensure global stationarity by design, and functional priors conditioned on GP hyperparameters to allow efficient model selection.
+Empirically, our method consistently outperforms existing approaches or matches performance of the heuristic methods, while offering stronger theoretical foundations.
 
 ## Requirements
 To setup environment execute `bash prepare_environment.sh`
